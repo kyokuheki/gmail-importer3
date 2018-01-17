@@ -219,7 +219,7 @@ def main():
     cache.dump()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(parents=[tools.argparser], description='Mail Importer for Gmail')
+    parser = argparse.ArgumentParser(parents=[tools.argparser], description='Mail Importer for Gmail will import your emails on a POP3-server to Gmail via Gmail API and HTTP-proxy, and puts UNREAD/INBOX labels on emails.')
     parser.add_argument('-l',   '--label',  action="store", default=os.getenv("IMPORTED_LABEL", "_imported"))
     parser.add_argument('-s',   '--mail_server',  action="store", default=os.getenv("MAIL_SERVER", 'localhost'))
     parser.add_argument('-u',   '--mail_user',  action="store", default=os.getenv("MAIL_USER"))
