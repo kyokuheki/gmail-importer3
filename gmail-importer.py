@@ -11,6 +11,7 @@ import traceback
 import pickle
 import logging
 import logging.handlers
+import time
 
 # for pop3
 import poplib
@@ -165,13 +166,7 @@ def import_(service, msg, label_id=None, user_id='me'):
     ).execute()
     return result
 
-def main():
-    # load seen flag cache
-    cache = Cache(args.nocache)
-    
-    # set proxyinfo
-    pi = httplib2.ProxyInfo(httplib2.socks.PROXY_TYPE_HTTP, args.proxy_host, args.proxy_port)
-    
+def process_emails(args, cache, pi):
     # discovery gmail api
     service = get_service(args, pi)
     label_id = get_labelid(service, args.label)
@@ -195,13 +190,30 @@ def main():
                 # set its seen flag
                 cache.add(uid)
             #raw_input("Type 'Ctrl+C' if you want to interrupt program.")
+    except Exception as e:
+        logger.exception('Failed to import messages')
+        raise
+    cache.dump()
+
+def main():
+    # load seen flag cache
+    cache = Cache(args.nocache)
+    
+    # set proxyinfo
+    pi = httplib2.ProxyInfo(httplib2.socks.PROXY_TYPE_HTTP, args.proxy_host, args.proxy_port)
+    
+    try:
+        process_emails(args, cache, pi)
+        while args.interval:
+            time.sleep(args.interval)
+            process_emails(args, cache, pi)
     except KeyboardInterrupt:
         # dump seen flag cache
         cache.dump()
         sys.exit("Crtl+C pressed. Shutting down.")
     except Exception as e:
-        logger.exception('Failed to import mbox message')
-        raise
+        logger.exception('Unknown exception occured.')
+        sys.exit("Unknown exception occured. Shutting down.")
 
     # dump seen flag cache
     cache.dump()
@@ -212,11 +224,12 @@ if __name__ == '__main__':
     parser.add_argument('-s',   '--mail_server',  action="store", default=os.getenv("MAIL_SERVER", 'localhost'))
     parser.add_argument('-u',   '--mail_user',  action="store", default=os.getenv("MAIL_USER"))
     parser.add_argument('-p',   '--mail_pass',  action="store", default=os.getenv("MAIL_PASS"))
-    parser.add_argument('--tls',  action="store_true", help="enable TLS/SSL")
+    parser.add_argument('--tls',  action="store_true", help="Enable TLS/SSL for POP3 protocol")
     parser.add_argument('-ph',   '--proxy_host',  action="store", default=os.getenv("PROXY_HOST"))
     parser.add_argument('-pp',   '--proxy_port', action="store", type=int, default=os.getenv("PROXY_PORT"))
-    parser.add_argument('--nocache',  action="store_true", help="ignore seen flag cache")
-    parser.add_argument('-d', '--debug',  action="store_true", help="enable debug message")
+    parser.add_argument('-i', '--interval', action="store", type=int, default=None, help="Wait interval seconds between import process. Type Ctrl+c if you want stop program.")
+    parser.add_argument('--nocache',  action="store_true", help="Ignore seen flag cache.")
+    parser.add_argument('-d', '--debug',  action="store_true", help="Enable debug message.")
     parser.set_defaults(logging_level='INFO')
 
     args = parser.parse_args()

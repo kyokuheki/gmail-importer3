@@ -26,9 +26,9 @@ usage: gmail-importer.py [-h] [--auth_host_name AUTH_HOST_NAME]
                          [--noauth_local_webserver]
                          [--auth_host_port [AUTH_HOST_PORT [AUTH_HOST_PORT ...]]]
                          [--logging_level {DEBUG,INFO,WARNING,ERROR,CRITICAL}]
-                         [-l LABEL] [-c] [-s MAIL_SERVER] [-u MAIL_USER]
+                         [-l LABEL] [-s MAIL_SERVER] [-u MAIL_USER]
                          [-p MAIL_PASS] [--tls] [-ph PROXY_HOST]
-                         [-pp PROXY_PORT] [-d]
+                         [-pp PROXY_PORT] [-i INTERVAL] [--nocache] [-d]
 
 Mail Importer for Gmail
 
@@ -43,12 +43,16 @@ optional arguments:
   --logging_level {DEBUG,INFO,WARNING,ERROR,CRITICAL}
                         Set the logging level of detail.
   -l LABEL, --label LABEL
-  -c, --cache
   -s MAIL_SERVER, --mail_server MAIL_SERVER
   -u MAIL_USER, --mail_user MAIL_USER
   -p MAIL_PASS, --mail_pass MAIL_PASS
-  --tls                 enable TLS/SSL
+  --tls                 Enable TLS/SSL for POP3 protocol
   -ph PROXY_HOST, --proxy_host PROXY_HOST
   -pp PROXY_PORT, --proxy_port PROXY_PORT
-  -d, --debug           enable debug message
+  -i INTERVAL, --interval INTERVAL
+                        Wait interval seconds between import process. Type
+                        Ctrl+c if you want stop program.
+  --nocache             Ignore seen flag cache.
+  -d, --debug           Enable debug message.
+
 ```
