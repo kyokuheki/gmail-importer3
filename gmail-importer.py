@@ -10,6 +10,7 @@ import argparse
 import traceback
 import pickle
 import logging
+import logging.handlers
 
 # for pop3
 import poplib
@@ -26,33 +27,22 @@ from oauth2client import client
 from oauth2client import tools
 import base64
 
-APPLICATION_NAME = "gmail-importer"
 
 # https://developers.google.com/gmail/api/auth/scopes
-#SCOPES = ['https://www.googleapis.com/auth/gmail.insert', 'https://www.googleapis.com/auth/gmail.readonly']
 SCOPES = ['https://www.googleapis.com/auth/gmail.insert', 
           'https://www.googleapis.com/auth/gmail.labels']
 CLIENT_SECRET_FILE = 'client_secret.json'
 CREDENTIAL_FILE = 'gmail-importer.json'
-APPLICATION_NAME = 'Mail Importer for Gmail'
+#APPLICATION_NAME = 'Mail Importer for Gmail'
+APPLICATION_NAME = "gmail-importer"
 
-_fmt = '[%(asctime)s] %(levelname)-8s:%(name)s:%(funcName)s.%(lineno)d - %(message)s'
-#_fmt = '%(created)f %(name)s[%(process)d]: %(levelname)s: %(filename)s.%(funcName)s.%(lineno)d - %(message)s'
-#_fmt = '%(created)f %(name)s[%(process)d]: %(levelname)s: %(module)s.%(funcName)s.%(lineno)d - %(message)s'
-
-#logging.basicConfig(format=_fmtcolor, level=lvl)
-#_formatter = logging.Formatter(_fmtcolor)
-#ch = logging.StreamHandler()
-#ch.setLevel(lvl)
-#ch.setFormatter(_formatter)
-#logger = logging.getLogger(__name__)
-#logger.setLevel(lvl)
-#logger.addHandler(ch)
+stdout_fmt = '%(asctime)s %(levelname)s %(name)s - %(message)s'
+file_fmt   = '%(asctime)s %(process)d %(levelname)s %(name)s:%(funcName)s(%(filename)s:%(lineno)d) - %(message)s'
 
 class Cache(object):
     pkl_name = APPLICATION_NAME + ".cache"
-    def __init__(self, is_cache):
-        if is_cache:
+    def __init__(self, is_clear):
+        if is_clear:
             self.ids = set()
         else:
             self.ids = self.load()
@@ -88,11 +78,9 @@ def parse_subject_py2(msg):
         subject = email.header.make_header(d_subject)
         subject = unicode(subject)
         return subject.encode('utf-8')
-    except email.errors.HeaderParseError as e:
-        logger.error("%s: %s" % (e, m_subject))
-        return m_subject
-    except UnicodeDecodeError as e:
-        logger.error("%s: %s" % (e, m_subject))
+    except Exception as e: #email.errors.HeaderParseError UnicodeDecodeError
+        logger.error("Failed to parse subject: %s (%s)" % (m_subject, traceback.format_exc))
+        logger.debug("Exception: %s" % traceback.format_exc)
         return m_subject
 
 def parse_date_py2(msg):
@@ -107,7 +95,6 @@ def parse_message_py2(string):
     msg = email.message_from_string(string)
     date = parse_date_py2(msg)
     subject = parse_subject_py2(msg)
-    #print(msg.get('Message-Id'))
     return (date, subject)
 
 # api
@@ -133,7 +120,7 @@ def get_credentials(flags, pi):
         flow.user_agent = APPLICATION_NAME
         http = httplib2.Http(proxy_info=pi)
         credentials = oauth2client.tools.run_flow(flow, store, flags, http=http)
-        print('Storing credentials to ' + credential_path)
+        logger.info('Storing credentials to ' + credential_path)
     return credentials
 
 def get_service(flags, pi):
@@ -155,7 +142,7 @@ def create_label(service, label_name, mlv='show', llv='labelShow', user_id='me')
         return r['id']
     except errors.HttpError as e:
         logger.info('Exception: %s' % e)
-        logging.exception("Can't create label '%s' for user %s", label_name, user_id)
+        logger.exception("Can't create label '%s' for user %s", label_name, user_id)
         raise
 
 def get_labelid(service, label, user_id='me'):
@@ -178,33 +165,33 @@ def import_(service, msg, label_id=None, user_id='me'):
     ).execute()
     return result
 
-def main(flags):
+def main():
     # load seen flag cache
-    cache = Cache(flags.cache)
+    cache = Cache(args.nocache)
     
     # set proxyinfo
-    pi = httplib2.ProxyInfo(httplib2.socks.PROXY_TYPE_HTTP, flags.proxy_host, flags.proxy_port)
+    pi = httplib2.ProxyInfo(httplib2.socks.PROXY_TYPE_HTTP, args.proxy_host, args.proxy_port)
     
     # discovery gmail api
-    service = get_service(flags, pi)
-    label_id = get_labelid(service, flags.label)
+    service = get_service(args, pi)
+    label_id = get_labelid(service, args.label)
     
     # pop3 login
-    M = login(flags.mail_server, flags.mail_user, flags.mail_pass, flags.tls)
+    M = login(args.mail_server, args.mail_user, args.mail_pass, args.tls)
     numMessages = M.stat()[0]
-    print("# of messages: %s" % numMessages)
+    logger.info("POP3 server has %s messages." % numMessages)
     
     # get email, insert gmail
     try:
-        for i in range(numMessages):
-            uid = M.uidl(i+1).split()[2]
+        for i in xrange(numMessages, 0, -1):
+            uid = M.uidl(i).split()[2]
             if not cache.is_member(uid):
-                msg = '\n'.join(M.retr(i+1)[1])
+                msg = '\n'.join(M.retr(i)[1])
                 d, s = parse_message_py2(msg)
-                r = import_(service, msg, label_id)
-                meta = (i+1, uid, r['id'].encode('utf-8'), d, s)
-                print("%s:%s:%s:%s:\t%s" % meta)
-                logger.info('imported: {"seq_id":"%s", "uid":"%s", "guid":"%s", "date":"%s", "subject":"%s"' % meta)
+                guid = import_(service, msg, label_id)['id'].encode('utf-8')
+                meta = (i, uid, guid, d, s)
+                logger.info("import: %s: %s: %s: %s" % (i, d, uid, s))
+                logger.debug('JSON: {"seq_id":"%s", "uid":"%s", "guid":"%s", "date":"%s", "subject":"%s"}' % meta)
                 # set its seen flag
                 cache.add(uid)
             #raw_input("Type 'Ctrl+C' if you want to interrupt program.")
@@ -212,39 +199,49 @@ def main(flags):
         # dump seen flag cache
         cache.dump()
         sys.exit("Crtl+C pressed. Shutting down.")
-    
+    except Exception as e:
+        logger.exception('Failed to import mbox message')
+        raise
+
     # dump seen flag cache
     cache.dump()
-    exit()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(parents=[tools.argparser], description='Mail Importer for Gmail')
-    #parser.add_argument('infile', nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="pop3 to Gmail with Gmail API")
     parser.add_argument('-l',   '--label',  action="store", default=os.getenv("IMPORTED_LABEL", "_imported"))
-    parser.add_argument('-c',   '--cache',  action="store_true")
     parser.add_argument('-s',   '--mail_server',  action="store", default=os.getenv("MAIL_SERVER", 'localhost'))
     parser.add_argument('-u',   '--mail_user',  action="store", default=os.getenv("MAIL_USER"))
     parser.add_argument('-p',   '--mail_pass',  action="store", default=os.getenv("MAIL_PASS"))
     parser.add_argument('--tls',  action="store_true", help="enable TLS/SSL")
     parser.add_argument('-ph',   '--proxy_host',  action="store", default=os.getenv("PROXY_HOST"))
-    parser.add_argument('-pp',   '--proxy_port',  action="store", default=os.getenv("PROXY_PORT"))
+    parser.add_argument('-pp',   '--proxy_port', action="store", type=int, default=os.getenv("PROXY_PORT"))
+    parser.add_argument('--nocache',  action="store_true", help="ignore seen flag cache")
     parser.add_argument('-d', '--debug',  action="store_true", help="enable debug message")
+    parser.set_defaults(logging_level='INFO')
+
     args = parser.parse_args()
 
+    # set logger
     _lvl = args.logging_level
     if args.debug:
         _lvl = logging.DEBUG
         httplib2.debuglevel = 4
     
-    _formatter = logging.Formatter(_fmt)
+    _cformatter = logging.Formatter(stdout_fmt)
     _ch = logging.StreamHandler()
-    _ch.setLevel(_lvl)
-    _ch.setFormatter(_formatter)
+    _ch.setLevel(logging.INFO)
+    _ch.setFormatter(_cformatter)
+    _file_formatter = logging.Formatter(file_fmt)
+    _fh = logging.handlers.RotatingFileHandler(APPLICATION_NAME + '.log', maxBytes=1024 * 1024 * 8, backupCount=8)
+    _fh.setLevel(logging.DEBUG)
+    _fh.setFormatter(_file_formatter)
     logger = logging.getLogger(APPLICATION_NAME)
     logger.setLevel(_lvl)
     logger.addHandler(_ch)
+    logger.addHandler(_fh)
 
+    # 
     logger.debug(args)
-    logger.info('logging level: %s' % logger.getEffectiveLevel())
+    logger.debug('logging level: %s' % logger.getEffectiveLevel())
 
-    main(args)
+    main()
