@@ -20,6 +20,13 @@ pip install --upgrade google-api-python-client
 ./gmail-importer.sh
 ```
 
+## Build exe file
+```
+pip install --upgrade google-api-python-client
+pip install --upgrade pyinstaller
+pyinstaller --clean --onefile --log-level=WARN gmail-importer.py
+```
+
 ## Usage
 ```
 $ python2 gmail-importer.py -h
@@ -57,3 +64,4 @@ optional arguments:
   -d, --debug           Enable debug message.
 
 ```
+

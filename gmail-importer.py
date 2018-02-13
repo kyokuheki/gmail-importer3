@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
-import six
 
 import os
 import sys
@@ -36,6 +35,7 @@ CLIENT_SECRET_FILE = 'client_secret.json'
 CREDENTIAL_FILE = 'gmail-importer.json'
 #APPLICATION_NAME = 'Mail Importer for Gmail'
 APPLICATION_NAME = "gmail-importer"
+USER_AGENT = 'Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.3; WOW64; Trident/7.0; Touch; .NET4.0E; .NET4.0C; .NET CLR 3.5.30729; .NET CLR 2.0.50727; .NET CLR 3.0.30729; Tablet PC 2.0)'
 
 stdout_fmt = '%(asctime)s %(levelname)s %(name)s - %(message)s'
 file_fmt   = '%(asctime)s %(process)d %(levelname)s %(name)s:%(funcName)s(%(filename)s:%(lineno)d) - %(message)s'
@@ -99,7 +99,7 @@ def parse_message_py2(string):
     return (date, subject)
 
 # api
-def get_credentials(flags, pi):
+def get_credentials(flags, pi, dir=os.path.expanduser('~')):
     """Gets valid user credentials from storage.
     
     If nothing has been stored, or if the stored credentials are invalid,
@@ -108,8 +108,7 @@ def get_credentials(flags, pi):
     Returns:
         Credentials, the obtained credential.
     """
-    home_dir = os.path.expanduser('~')
-    credential_dir = os.path.join(home_dir, '.credentials')
+    credential_dir = os.path.join(dir, '.credentials')
     if not os.path.exists(credential_dir):
         os.makedirs(credential_dir)
     credential_path = os.path.join(credential_dir, CREDENTIAL_FILE)
@@ -118,7 +117,7 @@ def get_credentials(flags, pi):
     credentials = store.get()
     if not credentials or credentials.invalid:
         flow = oauth2client.client.flow_from_clientsecrets(CLIENT_SECRET_FILE, SCOPES)
-        flow.user_agent = APPLICATION_NAME
+        flow.user_agent = USER_AGENT
         http = httplib2.Http(proxy_info=pi)
         credentials = oauth2client.tools.run_flow(flow, store, flags, http=http)
         logger.info('Storing credentials to ' + credential_path)
