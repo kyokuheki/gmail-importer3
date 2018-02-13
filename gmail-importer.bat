@@ -1,7 +1,11 @@
-export PROXY_HOST='proxy.example.com'
-export PROXY_PORT=20066
-export MAIL_SERVER='your.pop3.server.example.com'
-export MAIL_USER='denden.taro@your.pop3.server.example.com'
-export MAIL_PASS='password'
+@echo off
+chcp 65001
 
-python2 gmail-importer.py -i 300 $*
+set PROXY_HOST='proxy.example.com'
+set PROXY_PORT=20066
+set MAIL_SERVER='your.pop3.server.example.com'
+set MAIL_USER='denden.taro@your.pop3.server.example.com'
+set MAIL_PASS='password'
+
+cd /d %~dp0
+gmail-importer.exe -i 300 -l @lab.ntt.co.jp %*
