@@ -13,24 +13,24 @@ pip install --upgrade google-api-python-client
     - https://console.developers.google.com/apis/library/gmail.googleapis.com/
     - https://developers.google.com/gmail/api/quickstart/python
 
-3. Edit gmail-importer.sh
+3. Edit gi.sh
 
 4. To start the gmail-importer, run the following command (one line):
 ```
-./gmail-importer.sh
+./gi.sh
 ```
 
 ## Build exe file
 ```
 pip install --upgrade google-api-python-client
 pip install --upgrade pyinstaller
-pyinstaller --clean --onefile --log-level=WARN gmail-importer.py
+pyinstaller --clean --onefile --log-level=WARN gi.py
 ```
 
 ## Usage
 ```
-$ python2 gmail-importer.py -h
-usage: gmail-importer.py [-h] [--auth_host_name AUTH_HOST_NAME]
+$ python2 gi.py -h
+usage: gi.py [-h] [--auth_host_name AUTH_HOST_NAME]
                          [--noauth_local_webserver]
                          [--auth_host_port [AUTH_HOST_PORT [AUTH_HOST_PORT ...]]]
                          [--logging_level {DEBUG,INFO,WARNING,ERROR,CRITICAL}]
