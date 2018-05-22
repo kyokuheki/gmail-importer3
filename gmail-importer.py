@@ -11,6 +11,7 @@ import pickle
 import logging
 import logging.handlers
 import time
+import io
 
 # for pop3
 import poplib
@@ -70,6 +71,7 @@ def login(mail_server, mail_user, mail_pass, is_tls=False):
         M = poplib.POP3(mail_server)
     M.user(mail_user)
     M.pass_(mail_pass)
+    logger.info(M.getwelcome())
     return M
 
 def parse_subject_py2(msg):
@@ -158,20 +160,38 @@ def get_labelid(service, label, user_id='me'):
 
 def import_(service, msg, label_id=None, user_id='me'):
     labelids = ['INBOX','UNREAD', label_id]
-    message = {'raw': base64.urlsafe_b64encode(msg), 'labelIds':labelids}
-    result = service.users().messages().import_(
-        userId = user_id,
-        body=message
-    ).execute()
+    if len(msg)<5000000:
+        message = {'raw': base64.urlsafe_b64encode(msg), 'labelIds':labelids}
+        result = service.users().messages().import_(
+            userId = user_id,
+            body=message
+        ).execute()
+    else:
+        # Use media upload to allow messages more than 5mb.
+        # See https://developers.google.com/api-client-library/python/guide/media_upload
+        # and http://google-api-python-client.googlecode.com/hg/docs/epy/apiclient.http.MediaIoBaseUpload-class.html.
+        metadata_object = {'labelIds':labelids}
+        media = apiclient.http.MediaIoBaseUpload(io.BytesIO(msg), mimetype='message/rfc822')
+        result = service.users().messages().import_(
+            userId = user_id,
+            body=metadata_object,
+            media_body=media
+        ).execute()
     return result
 
 def process_emails(args, cache, pi):
     # discovery gmail api
-    service = get_service(args, pi)
-    label_id = get_labelid(service, args.label)
+    try:
+        service = get_service(args, pi)
+        label_id = get_labelid(service, args.label)
+    except Exception as e:
+        logger.exception('Failed to discovery gmail api')
+        raise
     
     # pop3 login
     M = login(args.mail_server, args.mail_user, args.mail_pass, args.tls)
+    if args.debug:
+        M.set_debuglevel(1)
     numMessages = M.stat()[0]
     logger.info("POP3 server has %s messages." % numMessages)
     
@@ -186,13 +206,20 @@ def process_emails(args, cache, pi):
                 meta = (i, uid, guid, d, s)
                 logger.info("import: %s: %s: %s: %s" % (i, d, uid, s))
                 logger.debug('JSON: {"seq_id":"%s", "uid":"%s", "guid":"%s", "date":"%s", "subject":"%s"}' % meta)
+                if args.delete:
+                    M.dele(i)
+                    logger.info("delete: %s: %s: %s: %s" % (i, d, uid, s))
                 # set its seen flag
                 cache.add(uid)
             #raw_input("Type 'Ctrl+C' if you want to interrupt program.")
+    except KeyboardInterrupt:
+        M.quit()
+        raise
     except Exception as e:
         logger.exception('Failed to import messages')
         raise
     cache.dump()
+    M.quit()
 
 def main():
     # load seen flag cache
@@ -212,7 +239,9 @@ def main():
         sys.exit("Crtl+C pressed. Shutting down.")
     except Exception as e:
         logger.exception('Unknown exception occured.')
-        sys.exit("Unknown exception occured. Shutting down.")
+        if not args.interval:
+            sys.exit("Unknown exception occured. Shutting down.")
+        logger.warning('Ignore the exception and continue processing.')
 
     # dump seen flag cache
     cache.dump()
@@ -223,10 +252,12 @@ if __name__ == '__main__':
     parser.add_argument('-s',   '--mail_server',  action="store", default=os.getenv("MAIL_SERVER", 'localhost'))
     parser.add_argument('-u',   '--mail_user',  action="store", default=os.getenv("MAIL_USER"))
     parser.add_argument('-p',   '--mail_pass',  action="store", default=os.getenv("MAIL_PASS"))
+    parser.add_argument('-D',   '--delete',  action="store_true", help="Delete imported messages")
     parser.add_argument('--tls',  action="store_true", help="Enable TLS/SSL for POP3 protocol")
     parser.add_argument('-ph',   '--proxy_host',  action="store", default=os.getenv("PROXY_HOST"))
     parser.add_argument('-pp',   '--proxy_port', action="store", type=int, default=os.getenv("PROXY_PORT"))
     parser.add_argument('-i', '--interval', action="store", type=int, default=None, help="Wait interval seconds between import process. Type Ctrl+c if you want stop program.")
+    parser.add_argument('-f', '--force', action="store_true", help="Ignore the exception and continue the import process, if used with the -i option.")
     parser.add_argument('--nocache',  action="store_true", help="Ignore seen flag cache.")
     parser.add_argument('-d', '--debug',  action="store_true", help="Enable debug message.")
     parser.set_defaults(logging_level='INFO')
