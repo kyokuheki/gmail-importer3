@@ -75,7 +75,9 @@ def login(mail_server, mail_user, mail_pass, is_tls=False):
     logger.info(M.getwelcome())
     return M
 
-def parse_subject_py2(msg):
+def parse_subject(msg):
+    if sys.version_info[0] > 2:
+        return msg.get('Subject')
     m_subject = msg.get('Subject')
     try:
         d_subject = email.header.decode_header(m_subject)
@@ -87,7 +89,7 @@ def parse_subject_py2(msg):
         logger.debug("Exception: %s" % traceback.format_exc)
         return m_subject
 
-def parse_date_py2(msg):
+def parse_date(msg):
     m_date = msg.get('Date')
     t_date = email.utils.parsedate_tz(m_date)
     #tz = dateutil.tz.tzoffset(None, t_date[9])
@@ -95,10 +97,10 @@ def parse_date_py2(msg):
     d_date = datetime.datetime(*t_date[:6])
     return d_date.isoformat()
 
-def parse_message_py2(string):
+def parse_message(string):
     msg = email.message_from_string(string)
-    date = parse_date_py2(msg)
-    subject = parse_subject_py2(msg)
+    date = parse_date(msg)
+    subject = parse_subject(msg)
     return (date, subject)
 
 # api
@@ -202,7 +204,8 @@ def process_emails(args, cache, pi):
             uid = M.uidl(i).split()[2]
             if not cache.is_member(uid):
                 msg = '\n'.join(M.retr(i)[1])
-                d, s = parse_message_py2(msg)
+                d, s = parse_message(msg)
+                logger.info("parsed: %s: %s: %s: %s" % (i, uid, d, s))
                 guid = import_(service, msg, label_id)['id'].encode('utf-8')
                 meta = (i, uid, guid, d, s)
                 logger.info("import: %s: %s: %s: %s" % (i, d, uid, s))
