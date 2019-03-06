@@ -21,13 +21,17 @@ import datetime
 
 # for gmail api
 import httplib2
-import apiclient
-from apiclient import discovery
-import oauth2client
-from oauth2client import client
-from oauth2client import tools
+import googleapiclient
+from googleapiclient import discovery
+import oauth2client.file
+import oauth2client.client
+import oauth2client.tools
 import base64
 
+# 
+#from googleapiclient.discovery import build
+#from google_auth_oauthlib.flow import InstalledAppFlow
+#from google.auth.transport.requests import Request
 
 # https://developers.google.com/gmail/api/auth/scopes
 SCOPES = ['https://www.googleapis.com/auth/gmail.insert', 
@@ -51,6 +55,8 @@ class Cache(object):
             self.ids = self.load()
     def add(self, id):
         self.ids.add(id)
+    def remove(self, id):
+        self.ids.remove(id)
     def is_member(self, id):
         return id in self.ids
     def load(self):
@@ -133,10 +139,11 @@ def get_service(flags, pi):
     http = httplib2.Http(proxy_info=pi)
     http = credentials.authorize(http)
     service = discovery.build('gmail', 'v1', http=http)
+    #service = build('gmail', 'v1', http=http)
     return service
 
 def create_label(service, label_name, mlv='show', llv='labelShow', user_id='me'):
-    from apiclient import errors
+    from googleapiclient import errors
     label_object = {'messageListVisibility': mlv,
             'name': label_name,
             'labelListVisibility': llv}
@@ -163,7 +170,7 @@ def get_labelid(service, label, user_id='me'):
 
 def import_(service, msg, label_id=None, user_id='me'):
     labelids = ['INBOX','UNREAD', label_id]
-    if len(msg)<5000000:
+    if len(msg)<1000000:
         message = {'raw': base64.urlsafe_b64encode(msg), 'labelIds':labelids}
         result = service.users().messages().import_(
             userId = user_id,
@@ -174,7 +181,7 @@ def import_(service, msg, label_id=None, user_id='me'):
         # See https://developers.google.com/api-client-library/python/guide/media_upload
         # and http://google-api-python-client.googlecode.com/hg/docs/epy/apiclient.http.MediaIoBaseUpload-class.html.
         metadata_object = {'labelIds':labelids}
-        media = apiclient.http.MediaIoBaseUpload(io.BytesIO(msg), mimetype='message/rfc822')
+        media = googleapiclient.http.MediaIoBaseUpload(io.BytesIO(msg), mimetype='message/rfc822')
         result = service.users().messages().import_(
             userId = user_id,
             body=metadata_object,
@@ -197,11 +204,14 @@ def process_emails(args, cache, pi):
         M.set_debuglevel(1)
     numMessages = M.stat()[0]
     logger.info("POP3 server has %s messages." % numMessages)
+    logger.debug("M.uidl: {}".format(M.uidl()))
     
     # get email, insert gmail
     try:
         for i in xrange(numMessages, 0, -1):
             uid = M.uidl(i).split()[2]
+            logger.info("msg: {}: {}: {}".format(i, uid, M.uidl(i)))
+            logger.debug("cache: {}".format(cache.ids))
             if not cache.is_member(uid):
                 msg = '\n'.join(M.retr(i)[1])
                 d, s = parse_message(msg)
@@ -210,20 +220,26 @@ def process_emails(args, cache, pi):
                 meta = (i, uid, guid, d, s)
                 logger.info("import: %s: %s: %s: %s" % (i, d, uid, s))
                 logger.debug('JSON: {"seq_id":"%s", "uid":"%s", "guid":"%s", "date":"%s", "subject":"%s"}' % meta)
+                # set its seen flag
+                cache.add(uid)
                 if args.delete:
                     M.dele(i)
                     logger.info("delete: %s: %s: %s: %s" % (i, d, uid, s))
-                # set its seen flag
-                cache.add(uid)
+                    cache.remove(uid)
             #raw_input("Type 'Ctrl+C' if you want to interrupt program.")
     except KeyboardInterrupt:
-        M.quit()
+        # dump seen flag cache
+        cache.dump()
+        r = M.quit()
+        logger.info(r)
         raise
     except Exception as e:
         logger.exception('Failed to import messages')
         raise
+    # dump seen flag cache
     cache.dump()
-    M.quit()
+    r = M.quit()
+    logger.info(r)
 
 def main():
     # load seen flag cache
@@ -232,26 +248,27 @@ def main():
     # set proxyinfo
     pi = httplib2.ProxyInfo(httplib2.socks.PROXY_TYPE_HTTP, args.proxy_host, args.proxy_port)
     
-    try:
-        process_emails(args, cache, pi)
-        while args.interval:
-            time.sleep(args.interval)
+    while args.interval:
+        time.sleep(args.interval)
+        #cache = Cache(False)
+        try:
             process_emails(args, cache, pi)
-    except KeyboardInterrupt:
-        # dump seen flag cache
-        cache.dump()
-        sys.exit("Crtl+C pressed. Shutting down.")
-    except Exception as e:
-        logger.exception('Unknown exception occured.')
-        if not args.interval:
+        except KeyboardInterrupt:
+            sys.exit("Crtl+C pressed. Shutting down.")
+        except Exception as e:
+            logger.exception('Unknown exception occured.')
+            if not args.force:
+                sys.exit("Unknown exception occured. Shutting down.")
+            logger.warning('Ignore the exception and continue processing.')
+    else:
+        try:
+            process_emails(args, cache, pi)
+        except Exception as e:
+            logger.exception('Unknown exception occured.')
             sys.exit("Unknown exception occured. Shutting down.")
-        logger.warning('Ignore the exception and continue processing.')
-
-    # dump seen flag cache
-    cache.dump()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(parents=[tools.argparser], description='Mail Importer for Gmail will import your emails on a POP3-server to Gmail via Gmail API and HTTP-proxy, and puts UNREAD/INBOX labels on emails.')
+    parser = argparse.ArgumentParser(parents=[oauth2client.tools.argparser], description='Mail Importer for Gmail will import your emails on a POP3-server to Gmail via Gmail API and HTTP-proxy, and puts UNREAD/INBOX labels on emails.')
     parser.add_argument('-l',   '--label',  action="store", default=os.getenv("IMPORTED_LABEL", "_imported"))
     parser.add_argument('-s',   '--mail_server',  action="store", default=os.getenv("MAIL_SERVER", 'localhost'))
     parser.add_argument('-u',   '--mail_user',  action="store", default=os.getenv("MAIL_USER"))
@@ -263,20 +280,20 @@ if __name__ == '__main__':
     parser.add_argument('-i', '--interval', action="store", type=int, default=None, help="Wait interval seconds between import process. Type Ctrl+c if you want stop program.")
     parser.add_argument('-f', '--force', action="store_true", help="Ignore the exception and continue the import process, if used with the -i option.")
     parser.add_argument('--nocache',  action="store_true", help="Ignore seen flag cache.")
+    parser.add_argument('-v', '--verbose', action='count', default=0, help="Make the operation more talkative")
+    parser.add_argument('-q', '--quiet', action='count', default=0, help="Quiet mode")
     parser.add_argument('-d', '--debug',  action="store_true", help="Enable debug message.")
-    parser.set_defaults(logging_level='INFO')
-
     args = parser.parse_args()
 
     # set logger
-    _lvl = args.logging_level
+    _lvl = logging.INFO + 10*args.quiet - 10*args.verbose
     if args.debug:
         _lvl = logging.DEBUG
         httplib2.debuglevel = 4
     
     _cformatter = logging.Formatter(stdout_fmt)
     _ch = logging.StreamHandler()
-    _ch.setLevel(logging.INFO)
+    _ch.setLevel(_lvl)
     _ch.setFormatter(_cformatter)
     _file_formatter = logging.Formatter(file_fmt)
     _fh = logging.handlers.RotatingFileHandler(FILENAME + '.log', maxBytes=1024 * 1024 * 8, backupCount=8)
