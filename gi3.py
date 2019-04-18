@@ -354,9 +354,9 @@ def process_emails_imap(args):
 
 def main():
     # load seen flag cache
-    cache = Cache(args.nocache)
     
     if args.mail_proto == 'POP3':
+        cache = Cache(args.nocache)
         process_emails = lambda args, cache=cache: process_emails_pop3(args, cache)
     elif args.mail_proto == 'IMAP':
         process_emails = process_emails_imap
