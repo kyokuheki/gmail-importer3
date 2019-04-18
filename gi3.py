@@ -168,7 +168,7 @@ def import_(service, msg, label_id=None, user_id='me'):
     if len(msg)<1000000:
         raw = base64.urlsafe_b64encode(msg).decode('utf-8')
         message = {'raw': raw, 'labelIds':labelids}
-        result = service.users().messages().import_(
+        response = service.users().messages().import_(
             userId=user_id,
             body=message
         ).execute()
@@ -178,7 +178,7 @@ def import_(service, msg, label_id=None, user_id='me'):
         # and http://google-api-python-client.googlecode.com/hg/docs/epy/apiclient.http.MediaIoBaseUpload-class.html.
         metadata_object = {'labelIds':labelids}
         media = googleapiclient.http.MediaIoBaseUpload(io.BytesIO(msg), mimetype='message/rfc822')
-        result = service.users().messages().import_(
+        response = service.users().messages().import_(
             userId=user_id,
             body=metadata_object,
             media_body=media
@@ -196,7 +196,7 @@ def import_(service, msg, label_id=None, user_id='me'):
             status, response = request.next_chunk()
             if status:
                 logging.info("import status: {}%".format(int(status.progress() * 100)))
-    return result
+    return response
 
 # pop3
 def login_pop3(host, username, pass_, port=0, is_tls=False, is_debug=False):
