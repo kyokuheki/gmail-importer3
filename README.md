@@ -79,3 +79,126 @@ optional arguments:
   -q, --quiet           Quiet mode
   -d, --debug           Enable debug message.
 ```
+
+## Reference
+- https://docs.python.org/ja/3.8/library/imaplib.html
+- https://yuji.wordpress.com/2011/06/22/python-imaplib-imap-example-with-gmail/
+- https://codeday.me/jp/qa/20190122/179684.html
+- https://qiita.com/stkdev/items/a44976fb81ae90a66381
+- https://www.programcreek.com/python/example/2875/imaplib.IMAP4_SSL
+- https://stackoverflow.com/questions/3527933/move-an-email-in-gmail-with-python-and-imaplib
+- https://qiita.com/renny1398/items/bcfd57c15cfb7c63326b
+
+## Snippets
+
+### imaplib
+
+```python
+import imaplib, email, email.policy
+SERVER="your.mail.server.com"
+USER="username"
+PASS="password"
+DST_MAILBOX = "_imported"
+
+# login
+M = imaplib.IMAP4(SERVER)
+M.login(USER, PASS)
+
+# list mailboxs
+typ, data = M.list()
+for d in data:
+    print(d.decode('utf-8'))
+
+# count and get emails in INBOX
+## select mailbox
+M.select('INBOX')
+## get UIDs of emails
+typ, data = M.uid('search', None, "ALL")
+uids = data[0].split()
+if typ == "OK":
+    print("IMAP server has {} messages: {}".format(len(uids)))
+    print("UIDS: {}".format(uids))
+else:
+    print("failed to open INBOX")
+
+## get emails in INBOX and move to DST_MAILBOX using UID
+for uid in uids:
+    # get email bytes: IMAP FETCH Command's data item "RFC822" is same to POP3 RETR command
+    # see RFC3501 sec 6.4.5 data item "RFC822"  https://tools.ietf.org/html/rfc3501#section-6.4.5
+    typ, data = M.uid('fetch', uid, '(RFC822)')
+    msg_raw_bytes = data[0][1]
+    # parse email message bytes
+    msg = email.message_from_bytes(msg_raw_bytes, policy=email.policy.SMTPUTF8)
+    subject = msg['subject']
+    print('Message {}: {}'.format(str(uid), subject))
+    # copy the email to mailbox DST_MAILBOX
+    typ, data = M.uid('COPY', uid, DST_MAILBOX)
+    print(typ, data)
+    # set deleted flag to the email in INBOX
+    typ, data = M.uid('STORE', uid , '+FLAGS', '(\Deleted)')
+    print(typ, data)
+    # delete the email in INBOX
+    typ, data = M.expunge()
+    print(typ, data)
+
+## fetch some data items
+uid = uids[0]
+typ, data = M.uid('fetch', uid, '(UID RFC822 BODY[TEXT])')
+rfc822 = data[0][1]
+body = data[1][1]
+print(data[0][0]) # -> (UID #### RFC822 {XXXXX}
+print(data[1][0]) # -> BODY[TEXT] {XXXX}
+print(data[2][0]) # -> )
+print(rfc822)
+print(body)
+
+# close mailbox and logout
+M.close()
+M.logout()
+```
+
+## poplib
+
+```python
+import poplib, email, email.policy
+SERVER="your.mail.server.com"
+USER="username"
+PASS="password"
+
+# login
+M = poplib.POP3(SERVER)
+M.set_debuglevel(1)
+M.user(USER)
+M.pass_(PASS)
+print(M.getwelcome())
+
+# count email
+numMessages = M.stat()[0]
+print("POP3 server has {} messages: {}".format(numMessages))
+
+# get email subjects
+for i in range(numMessages, 0, -1):
+    # get the email UID
+    uid = M.uidl(i).split()[2]
+    # get email bytes using POP3 RETR Command
+    msg_raw_bytes = b'\r\n'.join(M.retr(i)[1])
+    # parse email message bytes
+    msg = email.message_from_bytes(msg_raw_bytes, policy=email.policy.SMTPUTF8)
+    subject = msg['subject']
+    print('Message {}: {}'.format(str(uid), subject))
+    # set deleted flag to the email
+    M.dele(i)
+
+# quit POP3 session and purge deleted emails
+r = M.quit()
+print(r)
+```
+
+## gi
+
+```python
+import gi3, logging
+gi3.logger = logging.getLogger("test")
+MIMAP = gi3.login_imap("your.mail.server.com", "username", "password", is_debug=True)
+MPOP3 = gi3.login_pop3("your.mail.server.com", "username", "password", is_debug=True)
+```
