@@ -14,13 +14,19 @@ pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-
     - https://console.developers.google.com/apis/library/gmail.googleapis.com/
     - https://developers.google.com/gmail/api/quickstart/python
 
-3. Edit gi3.sh
-
-4. To start the gmail-importer, run the following command (one line):
+3. To start the gmail-importer3, run the following command:
 ```
-export HTTP_PROXY='http://proxy..example.com:8080'
+export HTTP_PROXY='http://proxy.example.com:20066'
 export HTTPS_PROXY=$HTTP_PROXY
-./gi3.sh
+export MAIL_SERVER='your.mail.server.example.com'
+export MAIL_USER='denden.taro@your.mail.server.example.com'
+export MAIL_PASS='password'
+# IMAP
+export MAIL_PROTOCOL=IMAP
+python3 gi3.py -l gmail_imported_label --move
+# POP3
+export MAIL_PROTOCOL=POP3
+python3 gi3.py -l gmail_imported_label --delete
 ```
 
 ## Build exe file
