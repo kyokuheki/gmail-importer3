@@ -10,12 +10,9 @@ import logging
 import logging.handlers
 import time
 import io
-
-# for pop3
+# pop/imap/emal
 import poplib
-# for imap
 import imaplib
-
 import email
 #import dateutil.tz
 import datetime
@@ -23,23 +20,19 @@ import datetime
 # for gmail api
 import httplib2
 import googleapiclient
-from googleapiclient import discovery
-import oauth2client.file
-import oauth2client.client
-import oauth2client.tools
-import googleapiclient.errors
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
 import base64
-
-# 
-#from googleapiclient.discovery import build
-#from google_auth_oauthlib.flow import InstalledAppFlow
-#from google.auth.transport.requests import Request
 
 # https://developers.google.com/gmail/api/auth/scopes
 SCOPES = ['https://www.googleapis.com/auth/gmail.insert', 
           'https://www.googleapis.com/auth/gmail.labels']
-CLIENT_SECRET_FILE = 'client_secret.json'
-CREDENTIAL_FILE = 'gi.json'
+API_SERVICE_NAME = 'gmail'
+API_VERSION = 'v1'
+CLIENT_SECRETS_FILE = 'client_secret.json'
+#CREDENTIAL_TOKEN_FILE = 'gi.json'
+CREDENTIAL_TOKEN_FILE = 'gi.token.pickle'
 #APPLICATION_NAME = 'Mail Importer for Gmail'
 APPLICATION_NAME = "g-importer"
 FILENAME = "gi"
@@ -105,36 +98,31 @@ def parse_message(bytes: bytes):
     return (msg, date, subject)
 
 # api gmail
-def get_credentials(flags, dir=os.path.expanduser('~')):
-    """Gets valid user credentials from storage.
-    
-    If nothing has been stored, or if the stored credentials are invalid,
-    the OAuth2 flow is completed to obtain the new credentials.
-    
+def get_credentials(client_secret_file=CLIENT_SECRETS_FILE, scopes=SCOPES, token_file=CREDENTIAL_TOKEN_FILE):
+    """
     Returns:
         Credentials, the obtained credential.
     """
-    credential_dir = os.path.join(dir, '.credentials')
-    if not os.path.exists(credential_dir):
-        os.makedirs(credential_dir)
-    credential_path = os.path.join(credential_dir, CREDENTIAL_FILE)
-    
-    store = oauth2client.file.Storage(credential_path)
-    credentials = store.get()
-    if not credentials or credentials.invalid:
-        flow = oauth2client.client.flow_from_clientsecrets(CLIENT_SECRET_FILE, SCOPES)
-        flow.user_agent = USER_AGENT
-        http = httplib2.Http()
-        credentials = oauth2client.tools.run_flow(flow, store, flags, http=http)
-        logger.info('Storing credentials to ' + credential_path)
-    return credentials
+    creds = None
+    if os.path.exists(token_file):
+        with open(token_file, 'rb') as token:
+            creds = pickle.load(token)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                client_secret_file, scopes)
+            creds = flow.run_local_server()
+            #creds = flow.run_console()
+        # Save the credentials for the next run
+        with open(token_file, 'wb') as token:
+            pickle.dump(creds, token)
+    return creds
 
-def get_service(flags):
-    credentials = get_credentials(flags)
-    http = httplib2.Http()
-    http = credentials.authorize(http)
-    service = discovery.build('gmail', 'v1', http=http)
-    #service = build('gmail', 'v1', http=http)
+def get_service(creds, api_service_name=API_SERVICE_NAME, api_version=API_VERSION):
+    service = build(api_service_name, api_version, credentials=creds)
     return service
 
 def create_label(service, label_name, mlv='show', llv='labelShow', user_id='me'):
@@ -228,7 +216,7 @@ def process_emails_pop3(args, cache):
     
     # discovery gmail api
     try:
-        service = get_service(args)
+        service = get_service(get_credentials())
         label_id = get_labelid(service, args.label)
     except Exception as e:
         logger.exception('Failed to discovery gmail api')
@@ -324,7 +312,7 @@ def process_emails_imap(args):
     
     # discovery gmail api
     try:
-        service = get_service(args)
+        service = get_service(get_credentials())
         label_id = get_labelid(service, args.label)
     except Exception as e:
         logger.exception('Failed to discovery gmail api')
@@ -374,7 +362,7 @@ def main():
         process_emails(args)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(parents=[oauth2client.tools.argparser], description='Mail Importer for Gmail will import your emails on a POP3/IMAP-server to Gmail via Gmail API and HTTP-proxy, and puts UNREAD/INBOX labels on emails. It supports HTTP_PROXY/HTTPS_PROXY.')
+    parser = argparse.ArgumentParser(description='Mail Importer for Gmail will import your emails on a POP3/IMAP-server to Gmail via Gmail API and HTTP-proxy, and puts UNREAD/INBOX labels on emails. It supports HTTP_PROXY/HTTPS_PROXY.')
     parser.add_argument('-l', '--label',  action="store", default=os.getenv("IMPORTED_LABEL", "_imported"))
     parser.add_argument('--mail_server',  action="store", default=os.getenv("MAIL_SERVER", 'localhost'))
     parser.add_argument('--mail_port',  action="store", type=int, default=os.getenv("MAIL_PORT", 0))
