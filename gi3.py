@@ -148,10 +148,10 @@ def get_labelid(service, label, user_id='me'):
         id = d[0]['id']
     else:
         id = create_label(service, label)
-        logging.info("Label '%s' doesn't exist, creating it", label)
+        logger.info("Label '{}' doesn't exist, creating it".format(label))
     return id
 
-def import_(service, msg, label_id=None, user_id='me'):
+def import_(service, msg, mail, label_id=None, user_id='me'):
     labelids = ['INBOX', 'UNREAD', label_id]
     if len(msg)<1000000:
         raw = base64.urlsafe_b64encode(msg).decode('utf-8')
@@ -160,12 +160,13 @@ def import_(service, msg, label_id=None, user_id='me'):
             userId=user_id,
             body=message
         ).execute()
-    elif len(msg)<5000000:
+    elif len(msg)<1000000:
         # Use media upload to allow messages more than 5mb.
         # See https://developers.google.com/api-client-library/python/guide/media_upload
         # and http://google-api-python-client.googlecode.com/hg/docs/epy/apiclient.http.MediaIoBaseUpload-class.html.
         metadata_object = {'labelIds':labelids}
-        media = googleapiclient.http.MediaIoBaseUpload(io.BytesIO(msg), mimetype='message/rfc822')
+        media = googleapiclient.http.MediaIoBaseUpload(io.StringIO(mail.as_string()), mimetype='message/rfc822')
+        #media = googleapiclient.http.MediaIoBaseUpload(io.BytesIO(msg), mimetype='message/rfc822')
         response = service.users().messages().import_(
             userId=user_id,
             body=metadata_object,
@@ -183,7 +184,7 @@ def import_(service, msg, label_id=None, user_id='me'):
         while response is None:
             status, response = request.next_chunk()
             if status:
-                logging.info("import status: {}%".format(int(status.progress() * 100)))
+                logger.info("import status: {}%".format(int(status.progress() * 100)))
     return response
 
 # pop3
@@ -234,7 +235,8 @@ def process_emails_pop3(args, cache):
                 raw_msg_bytes = b'\r\n'.join(M.retr(i)[1])
                 mail, d, s = parse_message(raw_msg_bytes)
                 logger.info("parsed: {}: {}: {}: {}".format(i, uid, d, s))
-                guid = import_(service, raw_msg_bytes, label_id)['id'].encode('utf-8')
+                guid = import_(service, raw_msg_bytes, mail, label_id)['id'].encode('utf-8')
+                #guid = import_(service, raw_msg_bytes, label_id)['id'].encode('utf-8')
                 logger.info("import: {}: {}: {}: {}: {}".format(i, uid, d, s, guid))
                 # set its seen flag
                 cache.add(uid)
@@ -325,8 +327,9 @@ def process_emails_imap(args):
                 raw_msg_bytes = data[0][1]
                 mail, d, s = parse_message(raw_msg_bytes)
                 logger.info("parsed: {}: {}: {}".format(uid, d, s))
+                guid = import_(service, raw_msg_bytes, mail, label_id)['id'].encode('utf-8')
                 #guid = import_(service, mail.as_bytes(), label_id)['id'].encode('utf-8')
-                guid = import_(service, raw_msg_bytes, label_id)['id'].encode('utf-8')
+                #guid = import_(service, raw_msg_bytes, label_id)['id'].encode('utf-8')
                 logger.info("import: {}: {}: {}: {}".format(uid, d, s, guid))
                 if args.move:
                     move_mbox(M, uid, args.imap_dst_mbox)
