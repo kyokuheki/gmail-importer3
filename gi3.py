@@ -153,14 +153,14 @@ def get_labelid(service, label, user_id='me'):
 
 def import_(service, msg, mail, label_id=None, user_id='me'):
     labelids = ['INBOX', 'UNREAD', label_id]
-    if len(msg)<1000000:
+    if len(msg)<5000000:
         raw = base64.urlsafe_b64encode(msg).decode('utf-8')
         message = {'raw': raw, 'labelIds':labelids}
         response = service.users().messages().import_(
             userId=user_id,
             body=message
         ).execute()
-    elif len(msg)<1000000:
+    elif len(msg)<20000000:
         # Use media upload to allow messages more than 5mb.
         # See https://developers.google.com/api-client-library/python/guide/media_upload
         # and http://google-api-python-client.googlecode.com/hg/docs/epy/apiclient.http.MediaIoBaseUpload-class.html.
@@ -327,9 +327,8 @@ def process_emails_imap(args):
                 raw_msg_bytes = data[0][1]
                 mail, d, s = parse_message(raw_msg_bytes)
                 logger.info("parsed: {}: {}: {}".format(uid, d, s))
-                guid = import_(service, raw_msg_bytes, mail, label_id)['id'].encode('utf-8')
-                #guid = import_(service, mail.as_bytes(), label_id)['id'].encode('utf-8')
-                #guid = import_(service, raw_msg_bytes, label_id)['id'].encode('utf-8')
+                guid = import_(service, mail.as_bytes(), mail, label_id)['id'].encode('utf-8')
+                #guid = import_(service, raw_msg_bytes, mail, label_id)['id'].encode('utf-8')
                 logger.info("import: {}: {}: {}: {}".format(uid, d, s, guid))
                 if args.move:
                     move_mbox(M, uid, args.imap_dst_mbox)
