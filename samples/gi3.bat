@@ -8,4 +8,9 @@ set MAIL_USER='denden.taro@your.mail.server.example.com'
 set MAIL_PASS='password'
 
 cd /d %~dp0
-gi3.exe -i 300 -l label --mail_proto=IMAP %*
+
+REM gi3.exe -i 300 -l label --mail_proto=IMAP %*
+:loop
+  .\gi3.exe -l --mail_proto=IMAP --move -f %*
+  timeout 60
+goto :loop
