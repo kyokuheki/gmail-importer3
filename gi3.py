@@ -155,7 +155,7 @@ def import_(service, msg, mail, label_id=None, user_id='me'):
     labelids = ['INBOX', 'UNREAD', label_id]
     if len(msg)<5000000:
         raw = base64.urlsafe_b64encode(msg).decode('utf-8')
-        message = {'raw': raw, 'labelIds':labelids}
+        message = {'raw': raw, 'labelIds': labelids}
         response = service.users().messages().import_(
             userId=user_id,
             body=message
@@ -165,12 +165,12 @@ def import_(service, msg, mail, label_id=None, user_id='me'):
         # See https://developers.google.com/api-client-library/python/guide/media_upload
         # and http://google-api-python-client.googlecode.com/hg/docs/epy/apiclient.http.MediaIoBaseUpload-class.html.
         metadata_object = {'labelIds':labelids}
-        media = googleapiclient.http.MediaIoBaseUpload(io.StringIO(mail.as_string()), mimetype='message/rfc822')
-        #media = googleapiclient.http.MediaIoBaseUpload(io.BytesIO(msg), mimetype='message/rfc822')
+        #media = googleapiclient.http.MediaIoBaseUpload(io.StringIO(mail.as_string()), mimetype='message/rfc822')
+        media = googleapiclient.http.MediaIoBaseUpload(io.BytesIO(msg), mimetype='message/rfc822')
         response = service.users().messages().import_(
             userId=user_id,
             body=metadata_object,
-            media_body=media
+            media_body=media,
         ).execute()
     else:
         metadata_object = {'labelIds':labelids}
@@ -247,7 +247,7 @@ def process_emails_pop3(args, cache):
             except googleapiclient.errors.HttpError as e:
                 if not args.force:
                     raise
-                logger.warning('Exception googleapiclient.errors.HttpError occured. Skip the email.')
+                logger.exception('Exception googleapiclient.errors.HttpError occured. Skip the email.')
                 logger.warning('Ignore the exception and continue processing.')
                 continue
             #input("Type 'Ctrl+C' if you want to interrupt program.")
@@ -335,7 +335,7 @@ def process_emails_imap(args):
             except googleapiclient.errors.HttpError as e:
                 if not args.force:
                     raise
-                logger.warning('Exception googleapiclient.errors.HttpError occured. Skip the email.')
+                logger.exception('Exception googleapiclient.errors.HttpError occured. Skip the email.')
                 logger.warning('Ignore the exception and continue processing.')
                 continue
             #input("Type 'Ctrl+C' if you want to interrupt program.")
