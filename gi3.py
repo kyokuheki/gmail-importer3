@@ -165,8 +165,9 @@ def import_(service, msg, mail, label_id=None, user_id='me'):
         # See https://developers.google.com/api-client-library/python/guide/media_upload
         # and http://google-api-python-client.googlecode.com/hg/docs/epy/apiclient.http.MediaIoBaseUpload-class.html.
         metadata_object = {'labelIds':labelids}
-        #media = googleapiclient.http.MediaIoBaseUpload(io.StringIO(mail.as_string()), mimetype='message/rfc822')
-        media = googleapiclient.http.MediaIoBaseUpload(io.BytesIO(msg), mimetype='message/rfc822')
+        media = googleapiclient.http.MediaIoBaseUpload(io.StringIO(mail.as_string()), mimetype='message/rfc822')
+        # if use io.BytesIO, then get UnicodeEncodeError('ascii' codec can't encode characters)
+        #media = googleapiclient.http.MediaIoBaseUpload(io.BytesIO(msg), mimetype='message/rfc822')
         response = service.users().messages().import_(
             userId=user_id,
             body=metadata_object,
@@ -174,7 +175,8 @@ def import_(service, msg, mail, label_id=None, user_id='me'):
         ).execute()
     else:
         metadata_object = {'labelIds':labelids}
-        media = googleapiclient.http.MediaIoBaseUpload(io.BytesIO(msg), mimetype='message/rfc822', resumable=True)
+        media = googleapiclient.http.MediaIoBaseUpload(io.StringIO(mail.as_string()), mimetype='message/rfc822', resumable=True)
+        #media = googleapiclient.http.MediaIoBaseUpload(io.BytesIO(msg), mimetype='message/rfc822', resumable=True)
         request = service.users().messages().import_(
             userId=user_id,
             body=metadata_object,
