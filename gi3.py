@@ -91,8 +91,8 @@ def parse_date(msg):
     return d_date.astimezone().isoformat()
 
 def parse_message(bytes: bytes):
-    #msg = email.message_from_bytes(bytes, policy=email.policy.SMTP)
-    msg = email.message_from_bytes(bytes, policy=email.policy.SMTPUTF8)
+    msg = email.message_from_bytes(bytes, policy=email.policy.SMTP)
+    #msg = email.message_from_bytes(bytes, policy=email.policy.SMTPUTF8)
     date = parse_date(msg)
     subject = msg['subject']
     return (msg, date, subject)
@@ -160,19 +160,29 @@ def import_(service, msg, mail, label_id=None, user_id='me'):
             userId=user_id,
             body=message
         ).execute()
-    elif len(msg)<20000000:
+    elif len(msg)<30000000:
         # Use media upload to allow messages more than 5mb.
         # See https://developers.google.com/api-client-library/python/guide/media_upload
         # and http://google-api-python-client.googlecode.com/hg/docs/epy/apiclient.http.MediaIoBaseUpload-class.html.
         metadata_object = {'labelIds':labelids}
-        media = googleapiclient.http.MediaIoBaseUpload(io.StringIO(mail.as_string()), mimetype='message/rfc822')
-        # if use io.BytesIO, then get UnicodeEncodeError('ascii' codec can't encode characters)
-        #media = googleapiclient.http.MediaIoBaseUpload(io.BytesIO(msg), mimetype='message/rfc822')
-        response = service.users().messages().import_(
-            userId=user_id,
-            body=metadata_object,
-            media_body=media,
-        ).execute()
+        try:
+            #media = googleapiclient.http.MediaIoBaseUpload(io.StringIO(mail.as_string()), mimetype='message/rfc822')
+            # if use io.BytesIO, then get UnicodeEncodeError('ascii' codec can't encode characters)
+            media = googleapiclient.http.MediaIoBaseUpload(io.BytesIO(msg), mimetype='message/rfc822')
+            response = service.users().messages().import_(
+                userId=user_id,
+                body=metadata_object,
+                media_body=media,
+            ).execute()
+        except UnicodeEncodeError as e:
+            logger.info("Catched '{}', then encode email data with 7 bit encoding".format(e))
+            bytes = mail.as_bytes(policy=email.policy.default.clone(cte_type="7bit"))
+            media = googleapiclient.http.MediaIoBaseUpload(io.BytesIO(bytes), mimetype='message/rfc822')
+            response = service.users().messages().import_(
+                userId=user_id,
+                body=metadata_object,
+                media_body=media,
+            ).execute()
     else:
         metadata_object = {'labelIds':labelids}
         media = googleapiclient.http.MediaIoBaseUpload(io.StringIO(mail.as_string()), mimetype='message/rfc822', resumable=True)
@@ -238,7 +248,6 @@ def process_emails_pop3(args, cache):
                 mail, d, s = parse_message(raw_msg_bytes)
                 logger.info("parsed: {}: {}: {}: {}".format(i, uid, d, s))
                 guid = import_(service, raw_msg_bytes, mail, label_id)['id'].encode('utf-8')
-                #guid = import_(service, raw_msg_bytes, label_id)['id'].encode('utf-8')
                 logger.info("import: {}: {}: {}: {}: {}".format(i, uid, d, s, guid))
                 # set its seen flag
                 cache.add(uid)
@@ -329,8 +338,7 @@ def process_emails_imap(args):
                 raw_msg_bytes = data[0][1]
                 mail, d, s = parse_message(raw_msg_bytes)
                 logger.info("parsed: {}: {}: {}".format(uid, d, s))
-                guid = import_(service, mail.as_bytes(), mail, label_id)['id'].encode('utf-8')
-                #guid = import_(service, raw_msg_bytes, mail, label_id)['id'].encode('utf-8')
+                guid = import_(service, raw_msg_bytes, mail, label_id)['id'].encode('utf-8')
                 logger.info("import: {}: {}: {}: {}".format(uid, d, s, guid))
                 if args.move:
                     move_mbox(M, uid, args.imap_dst_mbox)
