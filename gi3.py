@@ -3,6 +3,7 @@
 
 import os
 import sys
+from platform import uname
 import argparse
 import traceback
 import pickle
@@ -76,7 +77,7 @@ def set_logger(quiet, verbose, debug, colorize=True):
     _ch.setLevel(_lvl)
     _ch.setFormatter(_cformatter)
     _file_formatter = logging.Formatter(file_fmt)
-    _fh = logging.handlers.RotatingFileHandler(FILENAME + '.log', maxBytes=1024 * 1024 * 4, backupCount=4)
+    _fh = logging.handlers.RotatingFileHandler(FILENAME + '.' + uname().node + '.log', maxBytes=1024 * 1024 * 4, backupCount=4)
     _fh.setLevel(logging.DEBUG)
     _fh.setFormatter(_file_formatter)
     logger = logging.getLogger(APPLICATION_NAME)
